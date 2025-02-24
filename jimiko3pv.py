@@ -6,11 +6,13 @@ import os  # ใช้ os สำหรับการโหลด TOKEN จา�
 
 from myserver import server_on
 
+
 intents = discord.Intents.default()
 intents.members = True
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
 
 # เก็บข้อมูลห้องที่สร้างขึ้น
 private_rooms = {}
@@ -56,42 +58,10 @@ async def on_voice_state_update(member, before, after):
         # ตรวจสอบห้องที่ว่างและลบห้องเมื่อไม่มีคนอยู่
         await check_and_delete_empty_channel(new_channel)
 
-    # ตรวจสอบเมื่อสมาชิกออกจากห้อง (หรือเปลี่ยนห้อง)
-    if before.channel and before.channel.name == "none" and not after.channel:
-        room_name = f"{member.name}"
-        if room_name in private_rooms:
-            room = private_rooms[room_name]
-            channel = room['channel']
-
-            # ปรับสิทธิ์การเข้าห้องให้ไม่สามารถเข้าได้และไม่เห็นห้อง
-            await channel.set_permissions(member, view_channel=False, connect=False)
-
-            # แจ้งผู้ใช้ว่าไม่สามารถเข้าห้องได้
-            #await member.send(f"You have left the private voice room '{room_name}', and you can no longer see or join the room unless permitted.")
-            
-            # ตรวจสอบห้องที่ว่างและลบห้องเมื่อไม่มีคนอยู่
-            await check_and_delete_empty_channel(channel)
-
-    # ตรวจสอบหากผู้ใช้เปลี่ยนห้องจากห้องที่ถูกย้ายเข้ามา (ต้องการออกห้อง)
-    if before.channel and before.channel.name != "Create Private Room" and after.channel != before.channel:
-        room_name = f"{member.name}"
-        if room_name in private_rooms:
-            room = private_rooms[room_name]
-            channel = room['channel']
-
-            # ปรับสิทธิ์การเข้าห้องให้ไม่สามารถเข้าได้และไม่เห็นห้อง
-            await channel.set_permissions(member, view_channel=False, connect=False)
-
-            # แจ้งผู้ใช้ว่าไม่สามารถเข้าห้องได้
-            await member.send(f"You have left the private voice room '{room_name}', and you can no longer see or join the room unless permitted.")
-
-        # ตรวจสอบห้องที่ว่างและลบห้องเมื่อไม่มีคนอยู่
-        await check_and_delete_empty_channel(channel)
-
         
 
 
-@bot.tree.command(name="rename", description="Change the name of your private voice room")
+@bot.tree.command(name="rename", description="เปลี่ยนชื่อห้องส่วนตัว")
 async def rename(interaction: discord.Interaction, new_name: str):
     """คำสั่งสำหรับเปลี่ยนชื่อห้องเสียงส่วนตัว"""
 
@@ -104,7 +74,7 @@ async def rename(interaction: discord.Interaction, new_name: str):
             break
 
     if not room:
-        await interaction.response.send_message("You don't have a private room or you are not the owner!", ephemeral=True)
+        await interaction.response.send_message("มึงไม่มีห้องส่วนตัวอีควาย !", ephemeral=True)
         return
 
     channel = room['channel']
@@ -119,16 +89,17 @@ async def rename(interaction: discord.Interaction, new_name: str):
         await channel.edit(name=new_name)
         # อัปเดตชื่อห้องใน private_rooms
         private_rooms[new_name] = private_rooms.pop(channel.name)
-        private_rooms[new_name]['channel'] = channel
-        await interaction.response.send_message(f"Your private room has been renamed to '{new_name}'.", ephemeral=True)
+        private_rooms[new_name]['channel'] = channel  # ทำให้ข้อมูลใหม่ที่เก็บอยู่ใน private_rooms เป็นชื่อใหม่
+        await interaction.response.send_message(f"ห้องของคุณเปลี่ยนชื่อเป็น '{new_name}' เรียบร้อยแล้ว ครับ/ค่ะ ", ephemeral=True)
     except discord.Forbidden:
-        await interaction.response.send_message("I do not have permission to change the channel name.", ephemeral=True)
+        await interaction.response.send_message("ไม่มีสิทธิ์ไอโง่", ephemeral=True)
     except discord.HTTPException as e:
         await interaction.response.send_message(f"An error occurred while renaming the channel: {str(e)}", ephemeral=True)
 
 
 
-@bot.tree.command(name="move", description="Move a user into your private voice room")
+
+@bot.tree.command(name="move", description="ย้ายคนเข้าห้องส่วนตัว")
 async def move(interaction: discord.Interaction, user_id: str):
     """คำสั่งสำหรับย้ายผู้ใช้ไปยังห้องส่วนตัว"""
     
@@ -161,13 +132,13 @@ async def move(interaction: discord.Interaction, user_id: str):
         
         await interaction.response.send_message(f"คุณได้ย้ายคนนี้ {user.mention} เข้ามาในห้องของคุณแล้ว ครับ/ค่ะ .", ephemeral=True)
     except discord.Forbidden:
-        await interaction.response.send_message("I do not have permission to move this user.", ephemeral=True)
+        await interaction.response.send_message("ไม่มีสิทธิ์ไอโง่", ephemeral=True)
     except discord.HTTPException as e:
         await interaction.response.send_message(f"An error occurred while moving the user: {str(e)}", ephemeral=True)
 
 
 
-@bot.tree.command(name="permit", description="Permit a user to view and join your private voice room")
+@bot.tree.command(name="permit", description="เพิ่มผู้ใช้เข้าห้อง")
 async def permit(interaction: discord.Interaction, user_id: str):
     """คำสั่งสำหรับอนุญาตให้ผู้ใช้เห็นและเข้าห้องส่วนตัว"""
 
@@ -194,17 +165,17 @@ async def permit(interaction: discord.Interaction, user_id: str):
     try:
         # ให้ผู้ใช้สามารถเห็นห้อง (view_channel) และเข้าห้องได้ (connect)
         await channel.set_permissions(user, view_channel=True, connect=True)
-        await interaction.response.send_message(f"User {user.mention} has been permitted to view and join your private room.", ephemeral=True)
+        await interaction.response.send_message(f"คุณได้เพิ่มผู้ใช้ท่านนี้ {user.mention} เข้าห้องส่วนตัวแล้ว ครับ/ค่ะ", ephemeral=True)
     except discord.Forbidden:
-        await interaction.response.send_message("I do not have permission to modify this channel.", ephemeral=True)
+        await interaction.response.send_message("ไม่มีสิทธิ์ไอโง่", ephemeral=True)
     except discord.HTTPException as e:
-        await interaction.response.send_message(f"An error occurred while setting permissions: {str(e)}", ephemeral=True)
+        await interaction.response.send_message(f"ERROR: {str(e)}", ephemeral=True)
 
 
 
 async def check_and_delete_empty_channel(channel):
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         if len(channel.members) == 0:
             await channel.delete()
             print(f"Channel '{channel.name}' was deleted because it's empty.")
